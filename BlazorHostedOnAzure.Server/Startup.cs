@@ -2,8 +2,10 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json.Serialization;
+using System.IO;
 using System.Linq;
 
 namespace BlazorHostedOnAzure.Server
@@ -26,11 +28,28 @@ namespace BlazorHostedOnAzure.Server
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
             app.UseResponseCompression();
+            var clientBlazorWebRootPath = default(string);
 
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
                 app.UseBlazorDebugging();
+            }
+            else
+            {
+                if (env.WebRootPath != null)
+                {
+                    var pathOfIndex = Path.Combine(env.WebRootPath, "index.html");
+                    var pathOfContent = Path.Combine(env.WebRootPath, "_content");
+                    if (!File.Exists(pathOfIndex) && Directory.Exists(pathOfContent))
+                    {
+                        clientBlazorWebRootPath = Directory.GetDirectories(pathOfContent).FirstOrDefault();
+                        if (clientBlazorWebRootPath != null)
+                        {
+                            env.WebRootPath = clientBlazorWebRootPath;
+                        }
+                    }
+                }
             }
 
             app.UseClientSideBlazorFiles<Client.Startup>();
@@ -42,6 +61,14 @@ namespace BlazorHostedOnAzure.Server
                 endpoints.MapDefaultControllerRoute();
                 endpoints.MapFallbackToClientSideBlazor<Client.Startup>("index.html");
             });
+
+            if (clientBlazorWebRootPath != null)
+            {
+                app.UseStaticFiles(new StaticFileOptions
+                {
+                    FileProvider = new PhysicalFileProvider(clientBlazorWebRootPath)
+                });
+            }
         }
     }
 }
